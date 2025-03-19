@@ -154,18 +154,21 @@ class GameServer:
                                 print(f"Erro ao enviar PONG para cliente {client_id}: {e}")
                                 break
                         elif parts[0] == "CHAT" and len(parts) > 1:
-                                message = ','.join(parts[1:])
-                                chat_message = f"CHAT,{client_id},{message}\n"
-                                with self.lock:
-                                    disconnected = []
-                                    for socket, _ in self.clients.items():
-                                        try:
-                                            socket.send(chat_message.encode())
-                                        except Exception as e:
-                                            print(f"Erro ao enviar chat para cliente: {e}")
-                                            disconnected.append(socket)
-                                    for socket in disconnected:
-                                        self._disconnect_client(socket)
+                            message = ','.join(parts[1:])
+                            print(f"Recebida mensagem de chat de {client_id}: {message}")
+                            chat_message = f"CHAT,{client_id},{message}\n"
+                            print(f"Enviando para clientes: {chat_message.strip()}")
+                            with self.lock:
+                                disconnected = []
+                                for socket, _ in self.clients.items():
+                                    try:
+                                        socket.send(chat_message.encode())
+                                        print(f"Chat enviado com sucesso para cliente {self.clients[socket]}")
+                                    except Exception as e:
+                                        print(f"Erro ao enviar chat para cliente: {e}")
+                                        disconnected.append(socket)
+                                for socket in disconnected:
+                                    self._disconnect_client(socket)
         except Exception as e:
             print(f"Erro no cliente {client_id}: {e}")
         finally:
