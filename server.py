@@ -56,7 +56,7 @@ class GameServer:
                     state += f",{p_data['id']},{p_data['nickname']},{p_data['x']:.2f},{p_data['y']:.2f},{p_data['dir']}"
                 
                 disconnected = []
-                for client_socket, client_id in self.clients.items():
+                for client_socket, client_id in list(self.clients.items()):  # Iterar sobre cópia
                     try:
                         client_socket.send(state.encode())
                     except Exception as e:
@@ -103,7 +103,7 @@ class GameServer:
             self.penguins[client_id] = Penguin(client_id)
             
         try:
-            client_socket.send(str(client_id).encode())
+            client_socket.send(f"{client_id}\n".encode())  # Envia ID com newline
             print(f"Cliente {client_id} conectado de {addr}")
         except Exception as e:
             print(f"Erro ao enviar ID para novo cliente: {e}")
@@ -125,7 +125,10 @@ class GameServer:
                 message = data.decode().strip()
                 parts = message.split(',')
                 
-                if parts[0] == "UPDATE" and len(parts) >= 4:
+                if len(parts) < 1:
+                    continue
+                    
+                if parts[0] == "UPDATE" and len(parts) == 4:
                     try:
                         x = float(parts[1])
                         y = float(parts[2])
@@ -160,6 +163,10 @@ class GameServer:
                         
                         for socket in disconnected:
                             self._disconnect_client(socket)
+                elif parts[0] == "NICK" and len(parts) > 1:
+                    with self.lock:
+                        if client_id in self.penguins:
+                            self.penguins[client_id].nickname = ','.join(parts[1:])
         except Exception as e:
             print(f"Erro no cliente {client_id}: {e}")
         finally:
