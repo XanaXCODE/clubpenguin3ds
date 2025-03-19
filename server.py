@@ -143,4 +143,69 @@ class GameServer:
                     try:
                         client_socket.send(b"PONG")
                     except Exception as e:
-                        print(f"Erro ao enviar PONG para cliente {
+                        print(f"Erro ao enviar PONG para cliente {client_id}: {e}")
+                        break
+                elif parts[0] == "CHAT" and len(parts) > 1:
+                    message = ','.join(parts[1:])
+                    chat_message = f"CHAT,{client_id},{message}"
+                    
+                    with self.lock:
+                        disconnected = []
+                        for socket, _ in self.clients.items():
+                            try:
+                                socket.send(chat_message.encode())
+                            except Exception as e:
+                                print(f"Erro ao enviar chat para cliente: {e}")
+                                disconnected.append(socket)
+                        
+                        for socket in disconnected:
+                            self._disconnect_client(socket)
+        except Exception as e:
+            print(f"Erro no cliente {client_id}: {e}")
+        finally:
+            self._disconnect_client(client_socket)
+
+    def start(self):
+        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        
+        try:
+            server_socket.bind((self.host, self.port))
+            server_socket.listen(10)
+            print(f"Servidor iniciado em {self.host}:{self.port}")
+            
+            broadcast_thread = threading.Thread(target=self.broadcast_game_state)
+            broadcast_thread.daemon = True
+            broadcast_thread.start()
+            
+            while self.running:
+                try:
+                    server_socket.settimeout(1.0)
+                    client_socket, addr = server_socket.accept()
+                    client_thread = threading.Thread(target=self.handle_client, args=(client_socket, addr))
+                    client_thread.daemon = True
+                    client_thread.start()
+                except socket.timeout:
+                    continue
+                except Exception as e:
+                    print(f"Erro ao aceitar conexão: {e}")
+                    if not self.running:
+                        break
+                        
+        except Exception as e:
+            print(f"Erro ao iniciar servidor: {e}")
+        finally:
+            self.running = False
+            server_socket.close()
+            print("Servidor encerrado")
+
+    def stop(self):
+        self.running = False
+
+if __name__ == "__main__":
+    server = GameServer()
+    try:
+        server.start()
+    except KeyboardInterrupt:
+        print("Desligando servidor...")
+        server.stop()
