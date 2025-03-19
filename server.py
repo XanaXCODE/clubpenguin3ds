@@ -56,6 +56,7 @@ class GameServer:
                     state += f",{p_data['id']},{p_data['nickname']},{p_data['x']:.2f},{p_data['y']:.2f},{p_data['dir']}"
                 
                 disconnected = []
+                state += "\n"  # Adicionar nova linha ao final da mensagem
                 for client_socket, client_id in self.clients.items():
                     try:
                         client_socket.send(state.encode())
@@ -101,7 +102,7 @@ class GameServer:
             self.next_id += 1
             self.clients[client_socket] = client_id
             self.penguins[client_id] = Penguin(client_id)
-            
+        
         try:
             client_socket.send(str(client_id).encode())
             print(f"Cliente {client_id} conectado de {addr}")
@@ -110,7 +111,8 @@ class GameServer:
             self._disconnect_client(client_socket)
             return
         
-        client_socket.settimeout(5.0)  # Timeout de 5 segundos
+        client_socket.settimeout(5.0)
+        buffer = ""  # Buffer para acumular dados
         
         try:
             while self.running:
@@ -121,45 +123,45 @@ class GameServer:
                 data = client_socket.recv(1024)
                 if not data:
                     break
-                    
-                message = data.decode().strip()
-                parts = message.split(',')
                 
-                if parts[0] == "UPDATE" and len(parts) >= 4:
-                    try:
-                        x = float(parts[1])
-                        y = float(parts[2])
-                        direction = int(parts[3])
-                        
-                        with self.lock:
-                            if client_id in self.penguins:
-                                self.penguins[client_id].x = x
-                                self.penguins[client_id].y = y
-                                self.penguins[client_id].dir = direction
-                                self.penguins[client_id].last_update = time.time()
-                    except ValueError as e:
-                        print(f"Dado inválido recebido de cliente {client_id}: {e}")
-                elif parts[0] == "PING":
-                    try:
-                        client_socket.send(b"PONG")
-                    except Exception as e:
-                        print(f"Erro ao enviar PONG para cliente {client_id}: {e}")
-                        break
-                elif parts[0] == "CHAT" and len(parts) > 1:
-                    message = ','.join(parts[1:])
-                    chat_message = f"CHAT,{client_id},{message}"
-                    
-                    with self.lock:
-                        disconnected = []
-                        for socket, _ in self.clients.items():
+                buffer += data.decode()
+                while '\n' in buffer:
+                    message, buffer = buffer.split('\n', 1)  # Separar a primeira mensagem completa
+                    message = message.strip()
+                    if message:
+                        parts = message.split(',')
+                        if parts[0] == "UPDATE" and len(parts) >= 4:
                             try:
-                                socket.send(chat_message.encode())
+                                x = float(parts[1])
+                                y = float(parts[2])
+                                direction = int(parts[3])
+                                with self.lock:
+                                    if client_id in self.penguins:
+                                        self.penguins[client_id].x = x
+                                        self.penguins[client_id].y = y
+                                        self.penguins[client_id].dir = direction
+                                        self.penguins[client_id].last_update = time.time()
+                            except ValueError as e:
+                                print(f"Dado inválido recebido de cliente {client_id}: {e}")
+                        elif parts[0] == "PING":
+                            try:
+                                client_socket.send(b"PONG\n")  # Adicionar \n
                             except Exception as e:
-                                print(f"Erro ao enviar chat para cliente: {e}")
-                                disconnected.append(socket)
-                        
-                        for socket in disconnected:
-                            self._disconnect_client(socket)
+                                print(f"Erro ao enviar PONG para cliente {client_id}: {e}")
+                                break
+                        elif parts[0] == "CHAT" and len(parts) > 1:
+                            message = ','.join(parts[1:])
+                            chat_message = f"CHAT,{client_id},{message}\n"  # Adicionar \n
+                            with self.lock:
+                                disconnected = []
+                                for socket, _ in self.clients.items():
+                                    try:
+                                        socket.send(chat_message.encode())
+                                    except Exception as e:
+                                        print(f"Erro ao enviar chat para cliente: {e}")
+                                        disconnected.append(socket)
+                                for socket in disconnected:
+                                    self._disconnect_client(socket)
         except Exception as e:
             print(f"Erro no cliente {client_id}: {e}")
         finally:
