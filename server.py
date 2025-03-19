@@ -106,15 +106,19 @@ class GameServer:
         try:
             client_socket.send(str(client_id).encode())
             print(f"Cliente {client_id} conectado de {addr}")
-        except Exception as e:
-            print(f"Erro ao enviar ID para novo cliente: {e}")
-            self._disconnect_client(client_socket)
-            return
-        
-        client_socket.settimeout(5.0)
-        buffer = ""  # Buffer para acumular dados
-        
-        try:
+            
+            # Receber a mensagem "NICK" inicial
+            data = client_socket.recv(1024).decode().strip()
+            if data.startswith("NICK,"):
+                nickname = data.split(",", 1)[1]
+                self.penguins[client_id].nickname = nickname
+                print(f"Nickname do cliente {client_id}: {nickname}")
+            else:
+                print(f"Mensagem inesperada ao conectar: {data}")
+            
+            client_socket.settimeout(5.0)
+            buffer = ""
+            
             while self.running:
                 if client_socket.fileno() == -1:
                     print(f"Socket do cliente {client_id} já fechado")
@@ -150,18 +154,18 @@ class GameServer:
                                 print(f"Erro ao enviar PONG para cliente {client_id}: {e}")
                                 break
                         elif parts[0] == "CHAT" and len(parts) > 1:
-                            message = ','.join(parts[1:])
-                            chat_message = f"CHAT,{client_id},{message}\n"  # Adicionar \n
-                            with self.lock:
-                                disconnected = []
-                                for socket, _ in self.clients.items():
-                                    try:
-                                        socket.send(chat_message.encode())
-                                    except Exception as e:
-                                        print(f"Erro ao enviar chat para cliente: {e}")
-                                        disconnected.append(socket)
-                                for socket in disconnected:
-                                    self._disconnect_client(socket)
+                                message = ','.join(parts[1:])
+                                chat_message = f"CHAT,{client_id},{message}\n"
+                                with self.lock:
+                                    disconnected = []
+                                    for socket, _ in self.clients.items():
+                                        try:
+                                            socket.send(chat_message.encode())
+                                        except Exception as e:
+                                            print(f"Erro ao enviar chat para cliente: {e}")
+                                            disconnected.append(socket)
+                                    for socket in disconnected:
+                                        self._disconnect_client(socket)
         except Exception as e:
             print(f"Erro no cliente {client_id}: {e}")
         finally:
